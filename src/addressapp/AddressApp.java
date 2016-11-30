@@ -5,10 +5,15 @@
  */
 package addressapp;
 
+import addressapp.controller.BirthdayStatisticsController;
 import addressapp.controller.PersonEditDialogController;
 import addressapp.controller.PersonOverviewController;
+import addressapp.controller.RootLayoutController;
 import addressapp.model.Person;
+import addressapp.model.PersonListWrapper;
+import java.io.File;
 import java.io.IOException;
+import java.util.prefs.Preferences;
 import javafx.application.Application;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -16,6 +21,8 @@ import javafx.event.ActionEvent;
 import javafx.event.EventHandler;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
 import javafx.scene.control.Button;
 import javafx.scene.image.Image;
 import javafx.scene.layout.AnchorPane;
@@ -23,6 +30,9 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.StackPane;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.Marshaller;
+import javax.xml.bind.Unmarshaller;
 
 /**
  *
@@ -64,6 +74,27 @@ public class AddressApp extends Application {
         showPersonOverview();                     
     }
     
+    public File getPersonFilePath() {
+        Preferences prefs = Preferences.userNodeForPackage(AddressApp.class);
+        String filePath = prefs.get("filePath", null);
+        if (filePath != null) {
+            return new File(filePath);
+        } else {
+            return null;
+        }
+    }
+    
+    public void setPersonFilePath(File file) {
+        Preferences prefs = Preferences.userNodeForPackage(AddressApp.class);
+        if (file != null) {
+            prefs.put("filePath", file.getPath());
+            primaryStage.setTitle("AddressApp - " + file.getName());
+        } else {
+            prefs.remove("filePath");
+            primaryStage.setTitle("AddressApp");
+        }
+    }
+    
     public void initRootLayout() {
         try {
             FXMLLoader loader = new FXMLLoader();
@@ -71,9 +102,17 @@ public class AddressApp extends Application {
             rootLayout = (BorderPane) loader.load();
             Scene scene = new Scene(rootLayout);
             primaryStage.setScene(scene);
+            
+            RootLayoutController controller = loader.getController();
+            controller.setMainApp(this);
+                    
             primaryStage.show();
         } catch(IOException e) {
             e.printStackTrace();
+        }
+        File file = getPersonFilePath();
+        if (file != null) {
+            loadPersonDataFromFile(file);
         }
     }
     
@@ -125,5 +164,63 @@ public class AddressApp extends Application {
     public static void main(String[] args) {
         launch(args);
     }
+    
+    public void loadPersonDataFromFile(File file) {
+        try {
+            JAXBContext context = JAXBContext
+                    .newInstance(PersonListWrapper.class);
+            Unmarshaller um = context.createUnmarshaller();
+            PersonListWrapper wrapper = (PersonListWrapper) um.unmarshal(file);
+            personData.clear();
+            personData.addAll(wrapper.getPersons());
+            setPersonFilePath(file);
+        } catch(Exception e) {
+            Alert alert = new Alert(AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Could not load data");
+            alert.setContentText("Could not load data from file:\n" + file.getPath());
+            alert.showAndWait();            
+        }    
+    }
+    
+    public void savePersonDataToFile(File file) {
+        try {
+            JAXBContext context = JAXBContext
+                    .newInstance(PersonListWrapper.class);
+            Marshaller m = context.createMarshaller();
+            PersonListWrapper wrapper = new PersonListWrapper();
+            wrapper.setPersons(personData);
+            m.marshal(wrapper, file);
+            setPersonFilePath(file);        
+        } catch(Exception e) {
+            Alert alert = new Alert(AlertType.ERROR);
+            alert.setTitle("Error");
+            alert.setHeaderText("Could not save data");
+            alert.setContentText("Could not save data to file:\n" + file.getPath());
+            alert.showAndWait();
+        }
+    }
+    
+    public void showBirthdayStatistics() {
+        try {        
+            FXMLLoader loader = new FXMLLoader();
+            loader.setLocation(AddressApp.class.getResource("view/BirthdayStatistics.fxml"));
+            AnchorPane page = (AnchorPane) loader.load();
+            Stage dialogStage = new Stage();
+            dialogStage.setTitle("Birthday Statistics");
+            dialogStage.initModality(Modality.WINDOW_MODAL);
+            dialogStage.initOwner(primaryStage);
+            Scene scene = new Scene(page);
+            dialogStage.setScene(scene);
+            BirthdayStatisticsController controller = loader.getController();
+            controller.setPersonData(personData);
+            dialogStage.show();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }    
+    }   
+    
+    
+    
     
 }
